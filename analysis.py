@@ -90,13 +90,13 @@ class CCDStats(object):
 
         plt.xlim(0, np.max(np.array(x))+10)
         plt.ylim(coefs[1] - 100, np.max(np.array(y))+100)
-        figname = self.directory[-3:-1] + '_' + self.directory[:9] + '_'
+        figname = self.directory[-3:-1] + '_' + self.directory[5:13] + '_'
         for constraint in list(constraints.keys()):
             figname = figname + str(constraint) + '_' + str(constraints[constraint]) + '_'
         plt.savefig(figname + '.png')
         plt.show()
 
 
-ccd = CCDData('20200110_p4')
+ccd = CCDStats('Data/20200110_p4/')
 ccd.plot({'10.0':[],'30.0':[],'90.0':[],'180.0':[], '540.0':[]}, {'SET-TEMP':-30})
 #create_masterbias('20200108_p3')
