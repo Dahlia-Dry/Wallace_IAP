@@ -24,7 +24,112 @@ class CCDStats(object):
         masterbias = c.median_combine()
         masterbias.write(self.directory + '/masterbias.fits')
 
-    def plot(self, exptimes, constraints=None): #all the files for given telescope on given date
+    def combine(self, data, mode):
+        frames = []
+        for file in data:
+            if file.endswith('.fit'):
+                frames.append(CCDData.read(self.directory + file, unit='adu'))
+        c = Combiner(frames)
+        if mode == 'mean':
+            master = c.average_combine()
+        elif mode == 'median':
+            master= c.median_combine()
+        else:
+            raise ValueError('mode must be mean or median')
+        master = np.asarray(master)
+        master = np.subtract(master, 100)  # PEDESTAL
+        return master
+
+    def plot(self, xvar, yvar, frame, constraint=None, compile=None, fit=1, adu='mean'):
+        i = 0
+        colors = ['r','o','g']
+        if constraint is not None:
+            cdict = {}
+            for filename in os.listdir(self.directory):
+                if not filename.endswith('.fit') or fits.open(self.directory+ filename,ignore_missing_end=True)[0].header['IMAGETYP'] != frame:
+                    pass
+                else:
+                    if float(fits.open(self.directory +filename, ignore_missing_end=True)[0].header[constraint]) not in cdict:
+                        cdict[float(fits.open(self.directory +filename, ignore_missing_end=True)[0].header[constraint])] = [filename]
+                    else:
+                        cdict[float(fits.open(self.directory + filename, ignore_missing_end=True)[0].header[constraint])].append(filename)
+        for key in cdict.keys():
+            xdict = {}
+            for filename in cdict[key]:
+                if not filename.endswith('.fit') or fits.open(self.directory + filename, ignore_missing_end=True)[0].header['IMAGETYP'] != frame:
+                        break
+                else:
+                    if float(fits.open(self.directory + filename, ignore_missing_end=True)[0].header[xvar]) not in xdict:
+                        xdict[float(fits.open(self.directory + filename, ignore_missing_end=True)[0].header[xvar])] = [filename]
+                    else:
+                        xdict[float(fits.open(self.directory + filename, ignore_missing_end=True)[0].header[xvar])].append(filename)
+            cdict[key] = xdict
+            if compile is not None:
+                for x in xdict.keys():
+                    data = xdict[x]
+                    if yvar == 'pixel count':
+                        yarr = self.combine(data, compile)
+                        if adu == 'mean':
+                            y = np.mean(yarr)
+                        elif adu =='median':
+                            y = np.median(yarr)
+                        else:
+                            raise ValueError('adu must be mean or median')
+                    else:
+                        values = []
+                        for file in data:
+                            values.append(float(fits.open(self.directory + file, ignore_missing_end=True)[0].header[yvar]))
+                        if compile == 'mean':
+                            y = np.mean(values)
+                        elif compile == 'median':
+                            y = np.median(values)
+                        else:
+                            raise ValueError('compile must be mean or median if not None')
+                    xdict[x] = [y]
+            else:
+                for x in xdict.keys():
+                    yvalues = []
+                    data = xdict[x]
+                    for file in data:
+                        if yvar == 'pixel count':
+                            yarr = CCDData.read(self.directory + file, unit= 'adu')
+                            yarr= np.asarray(yarr)
+                            yarr = np.subtract(yarr, 100)  # PEDESTAL
+                            if adu == 'mean':
+                                y = np.mean(yarr)
+                            elif adu =='median':
+                                y = np.median(yarr)
+                            else:
+                                raise ValueError('adu must be mean or median')
+                        else:
+                            y = float(fits.open(self.directory + file, ignore_missing_end=True)[0].header[yvar])
+                        yvalues.append(y)
+                    xdict[x] = yvalues
+            x = []
+            y = []
+            for val in xdict:
+                y += xdict[val]
+                for yval in xdict[val]:
+                    x.append(val)
+            plt.scatter(x, y, label=key)
+            i = i + 1
+            slope, intercept, r, p, std_err = stats.linregress(x, y)
+            coefs = [slope, intercept]
+            plt.plot(np.linspace(0, max(x)), [coefs[0] * i + coefs[1] for i in np.linspace(min(x), max(x))])
+
+        title = xvar + ' vs ' + yvar + ' for ' + self.directory[-3:-1]
+        legend = plt.legend(loc='lower right', shadow=True)
+        plt.title(title)
+        plt.xlabel(xvar)
+        plt.ylabel(yvar)
+
+        plt.xlim(0, np.max(np.array(x)) + 10)
+        plt.ylim(coefs[1] - 100, np.max(np.array(y)) + 100)
+        figname = self.directory[-3:-1] + '_' + self.directory[5:13]
+        plt.savefig(figname + '.png')
+        plt.show()
+
+    def plot_exp(self, exptimes, constraints=None): #all the files for given telescope on given date
         master_darks = []
         if constraints is not None:
             for filename in os.listdir(self.directory):
@@ -53,7 +158,7 @@ class CCDStats(object):
             for filename in os.listdir(self.directory):
                 for key in list(exptimes.keys()):
                     if filename.endswith('.fit'):
-                        if float(fits.open(self.irectory +filename, ignore_missing_end=True)[0].header['EXPTIME']) == float(key) and \
+                        if float(fits.open(self.directory +filename, ignore_missing_end=True)[0].header['EXPTIME']) == float(key) and \
                                 fits.open(self.directory+ filename,ignore_missing_end=True)[0].header['IMAGETYP'] == 'Dark Frame':
                             exptimes[key].append(filename)
         print(exptimes)
@@ -97,6 +202,19 @@ class CCDStats(object):
         plt.show()
 
 
-ccd = CCDStats('Data/20200110_p4/')
-ccd.plot({'10.0':[],'30.0':[],'90.0':[],'180.0':[], '540.0':[]}, {'SET-TEMP':-30})
+#ccd = CCDStats('Data/20200110_p4/')
+#ccd.plot_exp({'10.0':[],'30.0':[],'90.0':[],'180.0':[], '540.0':[]}, {'SET-TEMP':-30})
 #create_masterbias('20200108_p3')
+#ccd.plot('EXPTIME', 'pixel count', 'Dark Frame', constraint='SET-TEMP', compile = 'mean')
+x = []
+y = []
+dir = 'Data/20200110_p2/'
+for filename in os.listdir(dir):
+    x.append(float(filename[-8:-4]))
+    y.append(float(fits.open(dir +filename, ignore_missing_end=True)[0].header['CCD-TEMP']))
+plt.scatter(x,y)
+plt.xlabel('time')
+plt.ylabel('ccd-temp')
+plt.title('CCD Temp v Time ' + dir[5:-1])
+plt.savefig('CCD Temp v Time ' + dir[5:-1] + '.png')
+plt.show()
