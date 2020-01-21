@@ -201,20 +201,21 @@ class CCDStats(object):
         plt.savefig(figname + '.png')
         plt.show()
 
+    def tempvtime(self):
+        x = []
+        y = []
+        for filename in os.listdir(self.directory):
+            x.append(float(filename[-8:-4]))
+            y.append(float(fits.open(self.directory + filename, ignore_missing_end=True)[0].header['CCD-TEMP']))
+        plt.scatter(x, y)
+        plt.xlabel('time')
+        plt.ylabel('ccd-temp')
+        plt.title('CCD Temp v Time ' + self.directory[5:-1])
+        plt.savefig('CCD Temp v Time ' + self.directory[5:-1] + '.png')
+        plt.show()
 
-#ccd = CCDStats('Data/20200110_p4/')
+
+ccd = CCDStats('Data/20200117_p4/')
 #ccd.plot_exp({'10.0':[],'30.0':[],'90.0':[],'180.0':[], '540.0':[]}, {'SET-TEMP':-30})
 #create_masterbias('20200108_p3')
-#ccd.plot('EXPTIME', 'pixel count', 'Dark Frame', constraint='SET-TEMP', compile = 'mean')
-x = []
-y = []
-dir = 'Data/20200110_p2/'
-for filename in os.listdir(dir):
-    x.append(float(filename[-8:-4]))
-    y.append(float(fits.open(dir +filename, ignore_missing_end=True)[0].header['CCD-TEMP']))
-plt.scatter(x,y)
-plt.xlabel('time')
-plt.ylabel('ccd-temp')
-plt.title('CCD Temp v Time ' + dir[5:-1])
-plt.savefig('CCD Temp v Time ' + dir[5:-1] + '.png')
-plt.show()
+ccd.plot('EXPTIME', 'pixel count', 'Dark Frame', constraint='CCD-TEMP', compile = 'mean')
