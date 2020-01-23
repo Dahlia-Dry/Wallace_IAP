@@ -13,16 +13,31 @@ class CCDStats(object):
     def __init__(self, directory):
         self.directory = directory
 
-    def create_masterbias(self):
-        biases = []
-        for filename in os.listdir(self.directory):
-            print(filename)
-            if filename.endswith('.fit'):
-                biases.append(CCDData.read(self.directory + filename, unit= 'adu'))
-        print(len(biases))
-        c = Combiner(biases)
-        masterbias = c.median_combine()
-        masterbias.write(self.directory + '/masterbias.fits')
+    def create_master(self, frame):
+        if frame == "Bias Frame":
+            biases = []
+            for filename in os.listdir(self.directory):
+                print(filename)
+                if filename.endswith('.fit') and fits.open(self.directory + filename, ignore_missing_end=True)[0].header['IMAGETYP'] == frame:
+                    biases.append(CCDData.read(self.directory + filename, unit= 'adu'))
+            print(len(biases))
+            c = Combiner(biases)
+            masterbias = c.median_combine()
+            masterbias.write(self.directory + 'masterbias.fits')
+            print('masterbias written to ' + self.directory)
+        elif frame == "Dark Frame":
+            darks = []
+            for filename in os.listdir(self.directory):
+                print(filename)
+                if filename.endswith('.fit') and fits.open(self.directory + filename, ignore_missing_end=True)[0].header['IMAGETYP'] == frame:
+                    darks.append(CCDData.read(self.directory + filename, unit='adu'))
+            print(len(darks))
+            c = Combiner(darks)
+            masterdark = c.median_combine()
+            masterdark.write(self.directory + 'masterdark.fits')
+            print('masterdark written to ' + self.directory)
+        else:
+            raise TypeError('Frame should be Dark Frame or Bias Frame')
 
     def combine(self, data, mode):
         frames = []
@@ -217,5 +232,5 @@ class CCDStats(object):
 
 ccd = CCDStats('Data/20200117_p4/')
 #ccd.plot_exp({'10.0':[],'30.0':[],'90.0':[],'180.0':[], '540.0':[]}, {'SET-TEMP':-30})
-#create_masterbias('20200108_p3')
+#ccd.create_master('Bias Frame')
 ccd.plot('EXPTIME', 'pixel count', 'Dark Frame', constraint='CCD-TEMP', compile = 'mean')
