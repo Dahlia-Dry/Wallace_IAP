@@ -13,31 +13,84 @@ class CCDStats(object):
     def __init__(self, directory):
         self.directory = directory
 
-    def create_master(self, frame):
+    def create_master(self, frame, constraint=None, write=False):
         if frame == "Bias Frame":
             biases = []
             for filename in os.listdir(self.directory):
-                print(filename)
                 if filename.endswith('.fit') and fits.open(self.directory + filename, ignore_missing_end=True)[0].header['IMAGETYP'] == frame:
-                    biases.append(CCDData.read(self.directory + filename, unit= 'adu'))
+                    if constraint is not None:
+                        for c in list(constraint.keys()):
+                            test = float(fits.open(self.directory + filename, ignore_missing_end=True)[0].header[c])
+                            if constraint[c] +1 > test > constraint[c] -1:
+                                biases.append(CCDData.read(self.directory + filename, unit= 'adu'))
+                                print(filename)
+                    else:
+                        biases.append(CCDData.read(self.directory + filename, unit='adu'))
+                        print(filename)
             print(len(biases))
             c = Combiner(biases)
-            masterbias = c.median_combine()
-            masterbias.write(self.directory + 'masterbias.fits')
-            print('masterbias written to ' + self.directory)
+            masterbias = c.average_combine()
+            if write:
+                if constraint is None:
+                    masterbias.write(self.directory + 'masterbias.fits')
+                else:
+                    title = self.directory + 'masterbias_'
+                    for item in list(constraint.items()):
+                        title = title + str(item[0]) + '_' + str(item[1]) + '_'
+                    masterbias.write(title + '.fits')
+                print('masterbias written to ' + self.directory)
+            print('mean:' + str(np.mean(np.asarray(masterbias))) + '\tstd:' + str(np.std(np.asarray(masterbias))))
+            return np.mean(np.asarray(masterbias)), np.std(np.asarray(masterbias))
+
         elif frame == "Dark Frame":
             darks = []
             for filename in os.listdir(self.directory):
-                print(filename)
+                score = 0
                 if filename.endswith('.fit') and fits.open(self.directory + filename, ignore_missing_end=True)[0].header['IMAGETYP'] == frame:
-                    darks.append(CCDData.read(self.directory + filename, unit='adu'))
+                    if constraint is not None:
+                        for c in list(constraint.keys()):
+                            test = float(fits.open(self.directory + filename, ignore_missing_end=True)[0].header[c])
+                            if constraint[c] +1 > test > constraint[c] -1:
+                                pass
+                            else:
+                                score = score + 1
+                        if score == 0:
+                            darks.append(CCDData.read(self.directory + filename, unit= 'adu'))
+                            print(filename)
+                    else:
+                        darks.append(CCDData.read(self.directory + filename, unit='adu'))
+                        print(filename)
             print(len(darks))
             c = Combiner(darks)
-            masterdark = c.median_combine()
-            masterdark.write(self.directory + 'masterdark.fits')
-            print('masterdark written to ' + self.directory)
+            masterdark = c.average_combine()
+            if write:
+                if constraint is None:
+                    masterdark.write(self.directory + 'masterdark.fits')
+                else:
+                    title = self.directory + 'masterdark_'
+                    for item in list(constraint.items()):
+                        title = title + str(item[0]) + '_' + str(item[1]) + '_'
+                    masterdark.write(title + '.fits')
+                print('masterdark written to ' + self.directory)
+            print('mean:' + str(np.mean(np.asarray(masterdark))) + '\tstd:' + str(np.std(np.asarray(masterdark))))
+            return np.mean(np.asarray(masterdark)), np.std(np.asarray(masterdark))
         else:
             raise TypeError('Frame should be Dark Frame or Bias Frame')
+
+
+    def show_attr(self, attr, frame=None):
+        for filename in os.listdir(self.directory):
+            if frame is not None:
+                if filename.endswith('.fit') and fits.open(self.directory + filename, ignore_missing_end=True)[0].header['IMAGETYP'] == frame:
+                    print(filename)
+                    for att in attr:
+                        print('\t' + att + '\t' + str(fits.open(self.directory + filename, ignore_missing_end=True)[0].header[att]))
+            else:
+                if filename.endswith('.fit'):
+                    print(filename)
+                    for att in attr:
+                        print('\t' + att + '\t' + str(
+                            fits.open(self.directory + filename, ignore_missing_end=True)[0].header[att]))
 
     def combine(self, data, mode):
         frames = []
@@ -130,7 +183,7 @@ class CCDStats(object):
             i = i + 1
             slope, intercept, r, p, std_err = stats.linregress(x, y)
             coefs = [slope, intercept]
-            plt.plot(np.linspace(0, max(x)), [coefs[0] * i + coefs[1] for i in np.linspace(min(x), max(x))])
+            plt.plot(np.linspace(0, max(x)), [coefs[0] * i + coefs[1] for i in np.linspace(0, max(x))])
 
         title = xvar + ' vs ' + yvar + ' for ' + self.directory[-3:-1]
         legend = plt.legend(loc='lower right', shadow=True)
@@ -198,7 +251,7 @@ class CCDStats(object):
         plt.scatter(x,y)
         slope, intercept, r, p, std_err = stats.linregress(x, y)
         coefs = [slope, intercept]
-        plt.plot(np.linspace(0, max(x)), [coefs[0]*i + coefs[1] for i in np.linspace(min(x), max(x))], color = 'r')
+        plt.plot(np.linspace(0, max(x)), [coefs[0]*i + coefs[1] for i in np.linspace(0, max(x))], color = 'r')
         plt.text(50,coefs[1]-50,'y = ' +str(coefs[0]) + '*x + ' + str(coefs[1]))
         plt.text(50, coefs[1]-75, 'r = ' + str(r) + ', r^2 = ' + str(r**2))
         title = 'Mean Pixel Count vs Exposure Time for ' + self.directory[-3:-1] + ' at '
@@ -230,7 +283,10 @@ class CCDStats(object):
         plt.show()
 
 
-ccd = CCDStats('Data/20200117_p4/')
+ccd = CCDStats('Data/20200117_p3/')#'Data/20200108_p4/'
 #ccd.plot_exp({'10.0':[],'30.0':[],'90.0':[],'180.0':[], '540.0':[]}, {'SET-TEMP':-30})
-#ccd.create_master('Bias Frame')
-ccd.plot('EXPTIME', 'pixel count', 'Dark Frame', constraint='CCD-TEMP', compile = 'mean')
+#ccd.plot_exp({'90.0':[],'180.0':[], '540.0':[]}, {'SET-TEMP':-30})
+mean, sdev = ccd.create_master('Dark Frame', constraint={'SET-TEMP':-30, 'EXPTIME':90})
+#ccd.tempvtime()
+#ccd.plot('EXPTIME', 'pixel count', 'Dark Frame', constraint='SET-TEMP', compile = 'mean')
+#ccd.show_attr(['FILTER', 'EXPTIME'])
